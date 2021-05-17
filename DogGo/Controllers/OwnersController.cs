@@ -1,11 +1,14 @@
 ﻿using DogGo.Models;
 using DogGo.Models.ViewModels;
 using DogGo.Repositories;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace DogGo.Controllers
@@ -14,22 +17,23 @@ namespace DogGo.Controllers
     {
         private readonly IOwnerRepository _ownerRepo;
         private readonly IWalkerRepository _walkerRepo;
-        //private readonly IDogRepository _dogRepo;
+        private readonly IDogRepository _dogRepo;
         private readonly INeighborhoodRepository _neighborhoodRepo;
 
         // ASP.NET will give us an instance of our Owner Repository. This is called "Dependency Injection"
         public OwnersController(IOwnerRepository ownerRepository,
                                 IWalkerRepository walkerRepository,
-                                INeighborhoodRepository neighborhoodRepository)
-            //IDogRepository dogRepository, needs added once I go back and add the dog files for the project
+                                INeighborhoodRepository neighborhoodRepository,
+                                IDogRepository dogRepository)
+           
         {
             _ownerRepo = ownerRepository;
             _walkerRepo = walkerRepository;
-            //_dogRepo = dogRepository;
+            _dogRepo = dogRepository;
             _neighborhoodRepo = neighborhoodRepository;
             
         }
-
+         
         // GET: OwnersController
         public ActionResult Index()
         {
@@ -42,7 +46,7 @@ namespace DogGo.Controllers
         public ActionResult Details(int id)
         {
             Owner owner = _ownerRepo.GetOwnerById(id);
-            //List<Dog> dogs = _dogRepo.GetDogsByOwnerId(owner.Id);
+            List<Dog> dogs = _dogRepo.GetDogsByOwnerId(owner.Id);
             List<Walker> walkers = _walkerRepo.GetWalkersInNeighborhood(owner.NeighborhoodId);
 
             ProfileViewModel vm = new ProfileViewModel()
@@ -140,6 +144,36 @@ namespace DogGo.Controllers
                 return View(owner);
             }
         }
-        
+        public ActionResult Login()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        public async Task<ActionResult> Login(LoginViewModel viewModel)
+        {
+            Owner owner = _ownerRepo.GetOwnerByEmail(viewModel.Email);
+
+            if (owner == null)
+            {
+                return Unauthorized();
+            }
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, owner.Id.ToString()),
+                new Claim(ClaimTypes.Email, owner.Email),
+                new Claim(ClaimTypes.Role, "DogOwner"),
+             };
+
+            var claimsIdentity = new ClaimsIdentity(
+                claims, CookieAuthenticationDefaults.AuthenticationScheme);
+
+            await HttpContext.SignInAsync(
+               CookieAuthenticationDefaults.AuthenticationScheme,
+                new ClaimsPrincipal(claimsIdentity));
+
+            return RedirectToAction("Index", "Dogs");
+        }
     }
 }
